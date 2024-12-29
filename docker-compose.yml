@@ -1,0 +1,64 @@
+services:
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+    networks:
+      - kafka-network
+
+  kafka:
+    image: bitnami/kafka:latest
+    ports:
+      - "9092:9092"
+    expose:
+      - "9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_REPLICATION_FACTOR: 1
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9093,OUTSIDE://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_LISTENERS: INSIDE://0.0.0.0:9093,OUTSIDE://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - zookeeper
+    networks:
+      - kafka-network
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.6.0
+    volumes:
+      - ./logstash/config:/usr/share/logstash/config
+    ports:
+      - "5044:5044"
+      - "9600:9600"
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+
+  splunk:
+    image: splunk/splunk:9.2  # Updated version
+    environment:
+      SPLUNK_START_ARGS: "--accept-license"
+      SPLUNK_USER: "root"  # Use 'admin' as the user for Splunk
+      SPLUNK_PASSWORD: "splunK@1234"  # Ensure sensitive data is handled securely
+    ports:
+      - "8000:8000"  # Default web interface port
+      - "8088:8088"  # HEC port for HTTP Event Collector
+    volumes:
+      - ./splunk-data:/opt/splunk/var/lib/splunk  # Data storage
+    depends_on:
+      - logstash
+    networks:
+      - kafka-network
+
+networks:
+  kafka-network:
+    driver: bridge
